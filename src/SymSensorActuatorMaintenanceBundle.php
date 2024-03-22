@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * This file is part of the symsensor/actuator-mailer-bundle package.
+ * This file is part of the symsensor/actuator-maintenance-bundle package.
  *
  * (c) Kevin Studer <kreemer@me.com>
  *
@@ -15,7 +15,7 @@ namespace SymSensor\ActuatorMaintenanceBundle;
 
 use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
-use SymSensor\ActuatorMailerBundle\DependencyInjection\SymSensorActuatorMaintenanceExtension;
+use SymSensor\ActuatorMaintenanceBundle\DependencyInjection\SymSensorActuatorMaintenanceExtension;
 
 final class SymSensorActuatorMaintenanceBundle extends AbstractBundle
 {

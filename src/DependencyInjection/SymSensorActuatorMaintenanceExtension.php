@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * This file is part of the symsensor/actuator-mailer-bundle package.
+ * This file is part of the symsensor/actuator-maintenance-bundle package.
  *
  * (c) Kevin Studer <kreemer@me.com>
  *
@@ -17,7 +17,6 @@ use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
-use Symfony\Component\DependencyInjection\Reference;
 use SymSensor\ActuatorMaintenanceBundle\Service\Health\Indicator as HealthIndicator;
 
 final class SymSensorActuatorMaintenanceExtension extends Extension
@@ -34,10 +33,8 @@ final class SymSensorActuatorMaintenanceExtension extends Extension
             $loader = new YamlFileLoader($container, new FileLocator(__DIR__.'/../../config'));
             $loader->load('services.yaml');
             if (isset($config['files']) && \is_array($config['files'])) {
-                
                 $definition = $container->getDefinition(HealthIndicator\Maintenance::class);
                 $definition->replaceArgument('$files', $config['files']);
-                
             }
         }
     }

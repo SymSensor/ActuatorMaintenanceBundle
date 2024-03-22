@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /*
- * This file is part of the symsensor/actuator-mailer-bundle package.
+ * This file is part of the symsensor/actuator-maintenance-bundle package.
  *
  * (c) Kevin Studer <kreemer@me.com>
  *
@@ -13,155 +13,201 @@ declare(strict_types=1);
 
 namespace SymSensor\ActuatorMaintenanceBundle\Tests\Service\Health\Indicator;
 
+use org\bovigo\vfs\vfsStream;
+use org\bovigo\vfs\vfsStreamDirectory;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Mailer\Transport\TransportInterface;
-use SymSensor\ActuatorBundle\Service\Health\Health;
-use SymSensor\ActuatorBundle\Service\Health\HealthStack;
-use SymSensor\ActuatorBundle\Service\Health\HealthState;
-use SymSensor\ActuatorMailerBundle\Service\Health\Indicator\Mailer;
-use SymSensor\ActuatorMailerBundle\Service\Health\Indicator\MailerTransport\TransportHealthIndicator;
+use SymSensor\ActuatorMaintenanceBundle\Service\Health\Indicator\Maintenance;
 
 class MaintenanceTest extends TestCase
 {
     /**
-     * @test
+     * @var vfsStreamDirectory
      */
-    public function correctName(): void
-    {
-        $mailer = $this->build();
+    private $root;
 
-        self::assertEquals('mailer', $mailer->name());
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->root = vfsStream::setup('exampleDir');
     }
 
     /**
      * @test
      */
-    public function healthNOKIfNoTransports(): void
+    public function correctName(): void
     {
-        $mailer = $this->build();
+        $indicator = $this->build();
 
-        $health = $mailer->health();
+        self::assertEquals('maintenance', $indicator->name());
+    }
 
+    /**
+     * @test
+     */
+    public function healthOKIfFileExist(): void
+    {
+        $indicator = $this->build();
+        $health = $indicator->health();
+
+        self::assertTrue($health->isUp());
+    }
+
+    /**
+     * @test
+     */
+    public function healthOKIfFileNotReadable(): void
+    {
+        // given
+        $file = vfsStream::newFile('test', 0000)->at($this->root);
+        $indicator = $this->build([$file->url()]);
+
+        // when
+        $health = $indicator->health();
+
+        // then
+        self::assertTrue($health->isUp());
+    }
+
+    /**
+     * @test
+     */
+    public function healthOKIfFileIsToBigToRead(): void
+    {
+        // given
+        $file = vfsStream::newFile('test')->at($this->root);
+        \file_put_contents($file->url(), \mb_substr(\str_shuffle(\str_repeat($x = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', (int) \ceil(1024 / \mb_strlen($x)))), 1, 1024));
+        $indicator = $this->build([$file->url()]);
+
+        // when
+        $health = $indicator->health();
+
+        // then
+        self::assertTrue($health->isUp());
+    }
+
+    /**
+     * @test
+     */
+    public function healthOKIfFileContentIsNot1(): void
+    {
+        // given
+        $file = vfsStream::newFile('test')->at($this->root);
+        \file_put_contents($file->url(), '0');
+        $indicator = $this->build([$file->url()]);
+
+        // when
+        $health = $indicator->health();
+
+        // then
+        self::assertTrue($health->isUp());
+    }
+
+    /**
+     * @test
+     */
+    public function healthNOKIfFileContentIs1(): void
+    {
+        // given
+        $file = vfsStream::newFile('test')->at($this->root);
+        \file_put_contents($file->url(), '1');
+        $indicator = $this->build([$file->url()]);
+
+        // when
+        $health = $indicator->health();
+
+        // then
         self::assertFalse($health->isUp());
     }
 
     /**
      * @test
      */
-    public function willDelegateHealthCheckToTransportHealthIndicator(): void
+    public function healthNOKReturnsFileAsError(): void
     {
         // given
-        $transport = self::createMock(TransportInterface::class);
-
-        $transportIndicator = self::createMock(TransportHealthIndicator::class);
-        $transportIndicator->expects(self::once())
-            ->method('supports')
-            ->with(self::equalTo($transport))
-            ->willReturn(true);
-
-        $healthTransport = Health::unknown();
-        $transportIndicator->expects(self::once())
-            ->method('health')
-            ->with(self::equalTo($transport))
-            ->willReturn($healthTransport);
-
-        $mailer = $this->build(['name' => $transport], [$transportIndicator]);
+        $file = vfsStream::newFile('test')->at($this->root);
+        \file_put_contents($file->url(), '1');
+        $indicator = $this->build([$file->url()]);
 
         // when
-        $health = $mailer->health();
+        $health = $indicator->health();
 
         // then
-        self::assertSame($healthTransport, $health);
+        $json = $health->jsonSerialize();
+        self::assertIsArray($json);
+        self::assertArrayHasKey('error', $json);
+        self::assertStringContainsString($file->url(), $json['error']);
     }
 
     /**
      * @test
      */
-    public function willNotCallTransportHealthIndicatorIfNotSuitable(): void
+    public function healthOKIfMultipleFilesAreAllOk(): void
     {
         // given
-        $transport = self::createMock(TransportInterface::class);
+        $file1 = vfsStream::newFile('test1')->at($this->root);
+        $file2 = vfsStream::newFile('test2')->at($this->root);
 
-        $transportIndicator = self::createMock(TransportHealthIndicator::class);
-        $transportIndicator->expects(self::once())
-            ->method('supports')
-            ->with(self::equalTo($transport))
-            ->willReturn(false);
+        \file_put_contents($file1->url(), '0');
+        \file_put_contents($file2->url(), '0');
 
-        $transportIndicator->expects(self::never())
-            ->method('health');
-
-        $mailer = $this->build(['name' => $transport], [$transportIndicator]);
+        $indicator = $this->build([$file1->url(), $file2->url()]);
 
         // when
-        $health = $mailer->health();
-
-        // then
-        self::assertEquals(HealthState::UNKNOWN, $health->getStatus());
-    }
-
-    /**
-     * @test
-     */
-    public function multipleTransportsWithMultipleHealthChecksResultInStack(): void
-    {
-        // given
-        $transport1 = self::createMock(TransportInterface::class);
-        $transport2 = self::createMock(TransportInterface::class);
-
-        $transportIndicator1 = self::createMock(TransportHealthIndicator::class);
-        $transportIndicator1->expects(self::exactly(2))
-            ->method('supports')
-            ->willReturnMap([
-                [$transport1, true],
-                [$transport2, false],
-            ])
-        ;
-
-        $transportIndicator1->expects(self::once())
-            ->method('health')
-            ->with(self::equalTo($transport1))
-            ->willReturn(Health::up(['id' => '1']))
-        ;
-
-        $transportIndicator2 = self::createMock(TransportHealthIndicator::class);
-        $transportIndicator2->expects(self::once())
-            ->method('supports')
-            ->with(self::equalTo($transport2))
-            ->willReturn(true)
-        ;
-
-        $transportIndicator2->expects(self::once())
-            ->method('health')
-            ->with(self::equalTo($transport2))
-            ->willReturn(Health::up(['id' => '2']))
-        ;
-
-        $mailer = $this->build(['name1' => $transport1, 'name2' => $transport2], [$transportIndicator1, $transportIndicator2]);
-
-        // when
-        $health = $mailer->health();
+        $health = $indicator->health();
 
         // then
         self::assertTrue($health->isUp());
-        self::assertInstanceOf(HealthStack::class, $health);
-
-        self::assertArrayHasKey('name1', $health->jsonSerialize());
-        self::assertArrayHasKey('name2', $health->jsonSerialize());
-
-        self::assertInstanceOf(Health::class, $health->jsonSerialize()['name1']);
-        self::assertInstanceOf(Health::class, $health->jsonSerialize()['name2']);
-
-        self::assertEquals(['id' => 1], $health->jsonSerialize()['name1']->getDetails());
-        self::assertEquals(['id' => 2], $health->jsonSerialize()['name2']->getDetails());
     }
 
     /**
-     * @param array<string, TransportInterface> $transports
-     * @param array<TransportHealthIndicator>   $transportHealthIndicators
+     * @test
      */
-    private function build(array $transports = [], array $transportHealthIndicators = []): Mailer
+    public function healthNOKIfMultipleFilesAreNOk(): void
     {
-        return new Mailer($transports, $transportHealthIndicators);
+        // given
+        $file1 = vfsStream::newFile('test1')->at($this->root);
+        $file2 = vfsStream::newFile('test2')->at($this->root);
+
+        \file_put_contents($file1->url(), '1');
+        \file_put_contents($file2->url(), '1');
+
+        $indicator = $this->build([$file1->url(), $file2->url()]);
+
+        // when
+        $health = $indicator->health();
+
+        // then
+        self::assertFalse($health->isUp());
+    }
+
+    /**
+     * @test
+     */
+    public function healthNOKIfOneOfMultipleFilesAreNOk(): void
+    {
+        // given
+        $file1 = vfsStream::newFile('test1')->at($this->root);
+        $file2 = vfsStream::newFile('test2')->at($this->root);
+
+        \file_put_contents($file1->url(), '0');
+        \file_put_contents($file2->url(), '1');
+
+        $indicator = $this->build([$file1->url(), $file2->url()]);
+
+        // when
+        $health = $indicator->health();
+
+        // then
+        self::assertFalse($health->isUp());
+    }
+
+    /**
+     * @param string[] $files
+     */
+    private function build(array $files = []): Maintenance
+    {
+        return new Maintenance($files);
     }
 }
