@@ -1,5 +1,6 @@
 services:
   SymSensor\ActuatorMaintenanceBundle\Service\Health\Indicator\Maintenance:
     tags: ['sym_sensor_actuator.health_indicator']
-
+    arguments:
+      $files: []
 
