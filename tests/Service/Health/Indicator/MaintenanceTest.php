@@ -59,7 +59,7 @@ class MaintenanceTest extends TestCase
     public function healthOKIfFileNotReadable(): void
     {
         // given
-        $file = vfsStream::newFile('test', 0000)->at($this->root);
+        $file = vfsStream::newFile('test', 0o000)->at($this->root);
         $indicator = $this->build([$file->url()]);
 
         // when
